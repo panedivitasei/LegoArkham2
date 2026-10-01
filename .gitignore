@@ -1,0 +1,44 @@
+# Build output
+shelved/ground-crawl/
+build/
+dist/
+tests/build/
+
+# Reverse-engineering workspace: IDB, unpacked exe, captures, install backups
+re/
+
+# Local session notes and handoffs
+*_HANDOFF.md
+resume.md
+
+# Runtime log the DLL writes next to itself
+*_clips.log
+LegoArkham2_controls.ini
+
+# Validation dumps from the anim exporter
+*.validation.json
+*_validation.json
+
+# Anim tooling: game-extracted inputs, third-party clones, history and scratch
+tools/anim/reference/
+tools/anim/milestones/
+tools/anim/blender/backups/
+tools/anim/blender/nxg-format-reference/
+tools/anim/blender/tt-extraction-reference/
+tools/anim/blender/*.png
+tools/anim/blender/*_raw.an4
+tools/anim/blender/*_frames.json
+tools/anim/blender/transition_mesh_audit.json
+
+# Editor and interpreter litter
+__pycache__/
+*.pyc
+*.blend1
+.vs/
+.vscode/
+.thumbnails/
+tools/anim/blender/transition_*_pose.json
+
+# Dev-only: anim tooling and regression tests stay local
+tools/
+tests/
