@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "devices.h"
+#include "hook.h"
 #include "input_frame.h"
 #include "keybinds.h"
 
@@ -37,6 +38,7 @@ using GetStateFn = DWORD(WINAPI*)(DWORD, XINPUT_STATE*);
 GetStateFn getState;
 bool padHeld[kPads];
 uint8_t keysBefore[256];
+bool f2Held, f2Pressed, suppressJoin, dropRequested;
 
 template <class T>
 T& At(uintptr_t address) {
@@ -58,6 +60,49 @@ bool Assign(int player, int slot) {
   return true;
 }
 
+using JoinDeviceFn = bool(__cdecl*)(int, char, int*, int);
+
+bool __cdecl OnJoinDevice(int player, char frontend, int* slot, int occupied) {
+  if (player == 1 && suppressJoin) return false;
+  bool joined = reinterpret_cast<JoinDeviceFn>(0x63A260)(player, frontend, slot, occupied);
+  if (!joined || frontend || player != 1 || !IsKeyboard(*slot)) return joined;
+  uintptr_t input = At<uintptr_t>(kInputPtr);
+  if (!input || At<int>(kDeviceIsPlayer)) return joined;
+  int first = HasDevice(0) ? Device(0) : -1;
+  int selected = -1;
+  for (int pad = 0; pad < kPads; ++pad) {
+    if (PadConnected(input, pad) && pad != first) { selected = pad; break; }
+  }
+  if (selected < 0 && IsPad(first) && PadConnected(input, first)) selected = first;
+  if (selected < 0) return joined;
+  // 9F5730 binds and validates the returned slot before joining; avoid the keyboard setup path.
+  if (selected == first) {
+    int keyboard = reinterpret_cast<KeyboardSlotForFn>(kKeyboardSlotFor)(10, 0);
+    if (!Assign(0, keyboard)) return joined;
+  }
+  *slot = selected;
+  return joined;
+}
+
+using DropCheckFn = int(__cdecl*)(int, int);
+using DropFn = int(__cdecl*)(int, int, int, int, int);
+
+int __cdecl OnDropCheck(int player, int checkInput) {
+  if (player == 1 && f2Pressed && HasDevice(1) && Device(1) >= 0) {
+    dropRequested = true;
+    return 1;
+  }
+  return reinterpret_cast<DropCheckFn>(0x87F140)(player, checkInput);
+}
+
+int __cdecl OnDrop(int player, int unassign, int keepInput, int extra, int effect) {
+  if (player == 1 && dropRequested) {
+    unassign = 1;
+    dropRequested = false;
+  }
+  return reinterpret_cast<DropFn>(0xAAE070)(player, unassign, keepInput, extra, effect);
+}
+
 // Any button, a trigger, or a stick past half deflection; smaller stick values are drift.
 bool PadInUse(const XINPUT_STATE& state) {
   const XINPUT_GAMEPAD& pad = state.Gamepad;
@@ -74,7 +119,8 @@ int FreshDevice(uintptr_t input, int keyboard, int skip) {
   int fresh = -1;
   auto keys = reinterpret_cast<const uint8_t*>(kKeyStates + 256 * At<uint8_t>(kKeyStateIndex));
   bool keyOnset = false;
-  for (int i = 0; i < 256; ++i) keyOnset |= keys[i] && !keysBefore[i];
+  // F2 joins player 2; it must not switch player 1 away from their pad first.
+  for (int i = 0; i < 256; ++i) keyOnset |= i != 60 && keys[i] && !keysBefore[i];
   memcpy(keysBefore, keys, sizeof(keysBefore));
   if ((devices::TakeActivity() || keyOnset) && keyboard != skip) fresh = keyboard;
   for (int pad = 0; pad < kPads; ++pad) {
@@ -89,6 +135,12 @@ int FreshDevice(uintptr_t input, int keyboard, int skip) {
 void Update() {
   uintptr_t input = At<uintptr_t>(kInputPtr);
   if (!input || !getState || At<int>(kDeviceIsPlayer)) return;
+  bool down = keybinds::KeyDown(60);
+  f2Pressed = down && !f2Held;
+  f2Held = down;
+  dropRequested = false;
+  if (!down) suppressJoin = false;
+  if (f2Pressed && HasDevice(1) && Device(1) >= 0) suppressJoin = true;
   int keyboard = reinterpret_cast<KeyboardSlotForFn>(kKeyboardSlotFor)(10, 0);
   bool second = HasDevice(1) && Device(1) >= 0;
   int fresh = FreshDevice(input, keyboard, second ? Device(1) : -1);
@@ -114,6 +166,10 @@ void Update() {
 }  // namespace
 
 void Install() {
+  // AD2CF0 applies native co-op, menu and cutscene guards before this drop check.
+  hook::Call(0xAD2E0D, reinterpret_cast<void*>(0x87F140), reinterpret_cast<void*>(&OnDropCheck));
+  hook::Call(0xAD2E59, reinterpret_cast<void*>(0xAAE070), reinterpret_cast<void*>(&OnDrop));
+  hook::Call(0x9F5913, reinterpret_cast<void*>(0x63A260), reinterpret_cast<void*>(&OnJoinDevice));
   // Same XInput DLL the game imports.
   if (HMODULE xinput = LoadLibraryA("xinput1_3.dll"))
     getState = reinterpret_cast<GetStateFn>(GetProcAddress(xinput, "XInputGetState"));

@@ -83,11 +83,17 @@ void* __fastcall OnPrivateFind(void* bank, void* edx, int id) {
   memcpy(privateEntries.back().snapshot.data(), source, 508);
   memset(bytes, 0, 8);
   memset(bytes + 124, 0, 144);
+  // Flash's appended loop belongs to combatroll_land, not the first subclip.
+  if (clip == &privateFlash) {
+    *reinterpret_cast<const char**>(bytes + 124) = "Flash";
+    *reinterpret_cast<const char**>(bytes + 196) = "combatroll_land";
+  }
   *reinterpret_cast<int16_t*>(bytes + 268) = static_cast<int16_t>(id);
   bytes[280] = 1;
   memset(bytes + 284, 0, 144);
   *reinterpret_cast<uintptr_t*>(bytes + 356) = reinterpret_cast<uintptr_t>(clip);
   memset(bytes + 428, 0, 24);
+  reinterpret_cast<void(__thiscall*)(void*)>(0x64C0E0)(bytes);
   return bytes;
 }
 
