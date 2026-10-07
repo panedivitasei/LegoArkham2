@@ -2,6 +2,10 @@
 
 An Arkham-style gameplay mod for the Steam release of LEGO Batman 2: DC Super Heroes.
 
+![Glide](docs/gliding.png)
+
+![Grapple](docs/grappling.png)
+
 ## Features
 
 - Third person camera
