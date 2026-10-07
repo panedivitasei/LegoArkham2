@@ -1,4 +1,6 @@
 #include "climb.h"
+#include "hook.h"
+#include "character_list.h"
 
 #include <windows.h>
 
@@ -18,6 +20,7 @@
 
 namespace climb {
 namespace {
+CharacterList allowed;
 
 // LEGOBatman2.exe addresses (Steam build, no ASLR).
 // The puzzle climb-walls are a surface type. Every collision surface carries a type index, the
@@ -70,8 +73,6 @@ int mode = kModeClimb;
 float speedScale = 1.0f;
 float reach = 1.2f;
 uint8_t key;
-bool surveyed;
-uint32_t original[kSurfaceTypes];  // the table's own flags, put back while the character is occupied
 
 template<class T> T& At(int c,int offset) { return *reinterpret_cast<T*>(c+offset); }
 using V=surfaceframe::V;
@@ -164,15 +165,17 @@ void SurfaceAnimation(int c,float ascent,float sideways) {
 
 uint32_t& Flags(int type) { return *reinterpret_cast<uint32_t*>(kSurfaceTable + kSurfaceEntry * type); }
 
-void Survey() {
-  surveyed = true;
-  for (int type = 0; type < kSurfaceTypes; ++type) original[type] = Flags(type);
-}
-
-// The grapple's climb onto a roof and the hangs run the same wall-climb logic every frame, and
-// with every surface climbable it would take over mid-move, so the patch is lifted for them.
-void Patch(bool on) {
-  for (int type = 0; type < kSurfaceTypes; ++type) Flags(type) = on ? original[type] | kClimbable : original[type];
+void __cdecl NativeClimb(int c) {
+  bool apply = enabled && allowed.Contains(c) && playercharacter::HumanSlot(c)>=0 &&
+      (!key || keybinds::KeyDown(key) || At<uint16_t>(c,kState)==*reinterpret_cast<uint16_t*>(kWallClimbState)) &&
+      !grapple::Occupied(c) &&
+      !grapple::DoorContact(c) && !grapple::DoorApproach(c,reach);
+  uint32_t saved[kSurfaceTypes];
+  if (apply) for (int type=0;type<kSurfaceTypes;++type) {
+    saved[type]=Flags(type); Flags(type)|=kClimbable;
+  }
+  reinterpret_cast<void(__cdecl*)(int)>(0xB17030)(c);
+  if (apply) for (int type=0;type<kSurfaceTypes;++type) Flags(type)=saved[type];
 }
 
 // Three rays ahead at chest height; the wall counts when the centre one hits.
@@ -197,6 +200,7 @@ bool WallAhead(int character) {
 // speed, sub_895430), so scaling the vector it wrote is the same as scaling that scalar. The mantle
 // boost it adds on top of a rising climb goes back unscaled, so ledge pull-ups land where they did.
 void ScaleNativeMove(int c) {
+  if (!enabled || !allowed.Contains(c) || playercharacter::HumanSlot(c)<0) return;
   V velocity = At<V>(c, kRequested);
   bool mantle = (At<uint8_t>(c, kMoveFlags) & 2) && velocity.y > kMantleBoost;
   if (mantle) velocity.y -= kMantleBoost;
@@ -212,7 +216,7 @@ bool LedgeActive(int c) {
   for (auto& entry:ledges) if (entry.character==c && entry.active) {
     const char* name=playercharacter::ResourceName(c);
     int slot=playercharacter::HumanSlot(c);
-    if (!enabled || entry.instance!=At<int>(c,4104) || slot<0 || &entry!=&ledges[slot]
+    if (!enabled || !allowed.Contains(c) || entry.instance!=At<int>(c,4104) || slot<0 || &entry!=&ledges[slot]
         || !name || !_stricmp(name,"Flash") || At<uint16_t>(c,kState)!=*reinterpret_cast<uint16_t*>(kWallClimbState)) {
       Release(entry);return false;
     }
@@ -242,7 +246,7 @@ void Attach(int c,Ledge& entry,V normal) {
 
 bool TryLedge(int c) {
   if (LedgeActive(c)) return true;
-  if (!enabled || mode!=kModeClimb || !glide::IsListed(c)) return false;
+  if (!enabled || mode!=kModeClimb || !allowed.Contains(c)) return false;
   const char* name=playercharacter::ResourceName(c);
   if (!name || !_stricmp(name,"Flash")) return false;
   auto* entry=CurrentLedge(c);
@@ -338,13 +342,11 @@ void Tick(int character) {
     SurfacePose(character,*CurrentLedge(character),std::clamp(static_cast<float>(ledgeTime()),0.0f,0.1f));
   }
   if (surfacerun::Active(character)) return;
-  if (!enabled || playercharacter::HumanSlot(character)<0 || !glide::IsListed(character)) return;
-  if (!surveyed) Survey();
+  if (!enabled || playercharacter::HumanSlot(character)<0 || !allowed.Contains(character)) return;
   bool wanted = (!key || keybinds::KeyDown(key)) && !grapple::Occupied(character);
   auto state = *reinterpret_cast<uint16_t*>(character + kState);
   bool climbing = state == static_cast<uint16_t>(*reinterpret_cast<int*>(kWallClimbState));
   if (grapple::DoorContact(character) || grapple::DoorApproach(character,reach)) {
-    Patch(false);
     At<uint16_t>(character,kContactKind)=0;At<float>(character,kContactTime)=0;
     if (climbing) {
       if (auto* entry=CurrentLedge(character)) Release(*entry);
@@ -358,7 +360,6 @@ void Tick(int character) {
     ledgeState(character,nullptr,*reinterpret_cast<int*>(kJumpState));
     return;
   }
-  Patch(wanted || climbing);
   if (mode == kModeClimb && (climbing || wanted) && (climbing || WallAhead(character))) {
     *reinterpret_cast<uint16_t*>(character + kContactKind) = kContactWall;
     *reinterpret_cast<float*>(character + kContactTime) = kHold;
@@ -369,8 +370,17 @@ void Speed(int percent) {
   speedScale = std::clamp(percent, 25, 400) / 100.0f;
 }
 
+void Characters(const std::string& names) { allowed.Set(names); }
+
+void __cdecl NativeLogic(int character) { NativeClimb(character); }
+void* LogicTarget() {
+  return enabled ? reinterpret_cast<void*>(NativeLogic) : reinterpret_cast<void*>(0xB17030);
+}
+
 void Install(int climbMode, int reachTenths, int scancode) {
   enabled = true;
+  for (uintptr_t site : {0xB1BA5A,0xB1DA1A})
+    hook::Call(site,reinterpret_cast<void*>(0xB17030),reinterpret_cast<void*>(NativeLogic));
   mode = climbMode == kModeHop ? kModeHop : kModeClimb;
   if (reachTenths > 0) reach = reachTenths / 10.0f;
   key = static_cast<uint8_t>(scancode);

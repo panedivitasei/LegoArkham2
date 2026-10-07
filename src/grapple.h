@@ -1,11 +1,13 @@
 #pragma once
+#include <string>
 
 namespace grapple {
 
-// Lets the glide-listed characters grapple onto the top edge of any wall in front of them. `range`
-// is how far ahead a wall is looked for and `height` how far above the wall hit the roof edge may
-// be, both in world units. Needs the exe unpacked.
-void Install(int range, int height);
+void Characters(const std::string& names);
+void InstallTicks();
+
+// Enable roof-edge grappling for listed characters; range and height are world units.
+void Install(int range, int height, const std::string& folder);
 
 // A collision ray from `start` along `extent` in the character's level, the gizmo floor-probe
 // recipe; `hit` gets the first surface point.

@@ -1,4 +1,7 @@
 #include "grapple.h"
+#include "character_list.h"
+#include "grapple_permission.h"
+#include "lantern_grapple.h"
 
 #include <windows.h>
 
@@ -17,6 +20,13 @@
 
 namespace grapple {
 namespace {
+CharacterList allowed;
+bool enabled;
+
+bool ListedLantern(int character) {
+  return enabled && allowed.Contains(character) &&
+      *reinterpret_cast<uint16_t*>(character + 3944) == *reinterpret_cast<uint16_t*>(0x101FE60);
+}
 
 // LEGOBatman2.exe addresses (Steam build, no ASLR).
 // The game's grapple starts from one routine that takes the character and a grapple gizmo and
@@ -28,7 +38,6 @@ namespace {
 // goes missing. The check runs from the per-frame anim sync, a plain call made for every character.
 constexpr uintptr_t kCharacterTick = 0xAAF6C0;  // cdecl(character), the anim sync
 constexpr uintptr_t kCharacterTickSites[] = {0xB244A6, 0xB24859};
-constexpr uintptr_t kStartGrapple = 0xAEF2B0;   // cdecl(character, gizmo) -> started
 constexpr uintptr_t kSceneOfEntity = 0x403510;  // cdecl(entity) -> the level scene the systems hang off
 constexpr uintptr_t kGrappleManager = 0x11BDFB0;  // dword, the grapple manager object
 constexpr uintptr_t kSystemTable = 0x11BDEEC;     // dword, object holding the system count at +100
@@ -65,7 +74,6 @@ constexpr uintptr_t kJumpOut = 0xB0DA20;            // (character, gizmo)
 // (sub_429D80: not while climbing onto a top, and only where the level allows it). When the second
 // says no, the start routine plays the shrug, which drops a hanging character, so it is asked first.
 constexpr uintptr_t kUsingPoint = 0x46B510;   // stdcall(character, gizmo)
-constexpr uintptr_t kMayGrapple = 0x429D80;   // stdcall(character, gizmo)
 constexpr uintptr_t kClimbTopState = 0x102135C;  // dword, the climb-onto-the-top state id
 
 // Character.
@@ -93,10 +101,8 @@ constexpr uintptr_t kRotateX = 0x51F4F0;  // cdecl(out, in, angle16)
 constexpr uintptr_t kRotateY = 0x51F560;  // cdecl(out, in, angle16)
 
 using TickFn = void(__cdecl*)(int character);
-using StartFn = char(__cdecl*)(int character, int gizmo);
 using JumpTopFn = void(__fastcall*)(int manager, void* edx, int character, int gizmo);
 using JumpOutFn = void(__stdcall*)(int character, int gizmo);
-using PointCheckFn = bool(__stdcall*)(int character, int gizmo);
 using EntityFn = int(__fastcall*)(int self, void* edx);
 using SceneFn = int(__cdecl*)(int entity);
 using WorldFn = int(__fastcall*)(int scene);
@@ -374,6 +380,15 @@ bool IsClone(int gizmo) {
   return false;
 }
 
+float* __fastcall OnFallingDive(int self, void*, int argument) {
+  int character = *reinterpret_cast<int*>(self+68);
+  // 41E2F0 overwrites both velocity vectors with a fixed descent.
+  if (enabled && character && allowed.Contains(character) && playercharacter::HumanSlot(character)>=0 &&
+      Busy(character) && IsClone(*reinterpret_cast<int*>(character+1228)))
+    return reinterpret_cast<float*>(character);
+  return reinterpret_cast<float*(__thiscall*)(int,int)>(0x41E2F0)(self,argument);
+}
+
 void __fastcall OnJumpTop(int manager, void* edx, int character, int gizmo) {
   if (IsClone(gizmo)) {
     reinterpret_cast<JumpOutFn>(kJumpOut)(character, gizmo);
@@ -391,6 +406,7 @@ void PatchPointer(uintptr_t slot, uintptr_t expected, uintptr_t value) {
 }
 
 void __cdecl OnCharacterTick(int character) {
+  lanterngrapple::Tick(character, Occupied(character));
   glide::BeforeSync(character);
   surfacerun::BeforeSync(character);
   flashroll::BeforeSync(character);
@@ -400,9 +416,9 @@ void __cdecl OnCharacterTick(int character) {
   flashroll::AfterSync(character);
   climb::Tick(character);
   bool pressed=abilitycontrols::GrapplePressed(character);
-  if (!pressed || !glide::IsListed(character)) return;
+  if (!enabled || !pressed || !allowed.Contains(character)) return;
   // On one of our points the only way off is the plain jump; there is no climb onto the top.
-  if (Occupied(character)) return;
+  if (Occupied(character) || grapplepermission::Flying(character)) return;
   int entity = reinterpret_cast<EntityFn>(kEntityOf)(character + kEntity, nullptr);
   int scene = entity ? reinterpret_cast<SceneFn>(kSceneOfEntity)(entity) : 0;
   if (!scene) return;
@@ -411,8 +427,9 @@ void __cdecl OnCharacterTick(int character) {
   float edge[3], outward[3];
   if (!FindLedge(character, edge, outward)) return;
   Place(proxy->gizmo, edge, outward);
-  if (!reinterpret_cast<PointCheckFn>(kMayGrapple)(character, reinterpret_cast<int>(proxy->gizmo))) return;
-  reinterpret_cast<StartFn>(kStartGrapple)(character, reinterpret_cast<int>(proxy->gizmo));
+  lanterngrapple::Prepare(character);
+  grapplepermission::Start(character, reinterpret_cast<int>(proxy->gizmo));
+  lanterngrapple::FinishStart(character, reinterpret_cast<int>(proxy->gizmo));
 }
 
 }  // namespace
@@ -422,11 +439,20 @@ bool Occupied(int character) {
   return Busy(character) || state == static_cast<uint16_t>(*reinterpret_cast<int*>(kClimbTopState));
 }
 
-void Install(int rangeUnits, int heightUnits) {
-  if (rangeUnits > 0) range = static_cast<float>(rangeUnits);
-  if (heightUnits > 0) height = static_cast<float>(heightUnits);
+void InstallTicks() {
   for (uintptr_t site : kCharacterTickSites)
     hook::Call(site, reinterpret_cast<void*>(kCharacterTick), reinterpret_cast<void*>(OnCharacterTick));
+}
+
+void Characters(const std::string& names) { allowed.Set(names); }
+
+void Install(int rangeUnits, int heightUnits, const std::string& folder) {
+  enabled = true;
+  hook::Call(0x493FFD,reinterpret_cast<void*>(0x41E2F0),reinterpret_cast<void*>(OnFallingDive));
+  lanterngrapple::Install(ListedLantern);
+  glideanim::GrappleClips(folder,lanterngrapple::AnimSet);
+  if (rangeUnits > 0) range = static_cast<float>(rangeUnits);
+  if (heightUnits > 0) height = static_cast<float>(heightUnits);
   PatchPointer(kJumpTopSlot, kJumpTop, reinterpret_cast<uintptr_t>(&OnJumpTop));
 }
 

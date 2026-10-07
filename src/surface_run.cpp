@@ -19,7 +19,6 @@
 
 namespace surfacerun {
 namespace {
-constexpr uintptr_t kClimbLogic = 0xB17030;
 constexpr uintptr_t kClimbMove = 0x8F5F60;
 // The hang logic (state 76, "Hang"): while in the climb or jump state it takes any downward-facing
 // surface the game's own probe finds (normal y < -0.92 at +1092) and switches to the hang, which
@@ -223,7 +222,7 @@ void __cdecl OnLogic(int c) {
     for (auto& r:runners) if (r.character==c) { ReleaseTransform(c,r); r.active=false; }
     if (!climb::LedgeActive(c) && !(playercharacter::HumanSlot(c)>=0
         && (grapple::DoorContact(c) || grapple::DoorApproach(c))))
-      reinterpret_cast<LogicFn>(kClimbLogic)(c);
+      climb::NativeLogic(c);
     return;
   }
   auto& r=Get(c);
@@ -459,8 +458,8 @@ void Install(int speedTenths) {
   uintptr_t target=reinterpret_cast<uintptr_t>(&OnMove);
   bool move=hook::Patch(0xAC07BB,{0x60,0x5F,0x8F,0},
       {static_cast<BYTE>(target),static_cast<BYTE>(target>>8),static_cast<BYTE>(target>>16),static_cast<BYTE>(target>>24)});
-  bool first=hook::Call(0xB1BA5A,reinterpret_cast<void*>(kClimbLogic),reinterpret_cast<void*>(&OnLogic));
-  bool second=hook::Call(0xB1DA1A,reinterpret_cast<void*>(kClimbLogic),reinterpret_cast<void*>(&OnLogic));
+  bool first=hook::Call(0xB1BA5A,climb::LogicTarget(),reinterpret_cast<void*>(&OnLogic));
+  bool second=hook::Call(0xB1DA1A,climb::LogicTarget(),reinterpret_cast<void*>(&OnLogic));
   bool hang=hook::Call(kHangLogicSite,reinterpret_cast<void*>(kHangLogic),reinterpret_cast<void*>(&OnHang));
   enabled=move && first && second && hang;
   if (!enabled) glideanim::Note("surface run: hook mismatch; disabled");

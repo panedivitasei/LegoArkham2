@@ -18,22 +18,15 @@ namespace glide {
 namespace {
 
 // LEGOBatman2.exe addresses (Steam build, no ASLR).
-// The glide is a state of the game's own, entered from the character update's glide logic when
-// jump is pressed or held while falling. That logic has no ability check; what keeps it out of
-// story levels are two flags on the level definition: it wants super_bonus_level (Gotham City)
-// and refuses levelplay_level. Both tests are taken out of the code and put back, per character,
-// in front of the call that enters the glide.
+// Bypass the level restrictions; OnEnterGlide checks the configured character list.
 constexpr uintptr_t kBonusLevelTest = 0xAC7196;  // `and edi, 1` on levelDef+220 bit 25
 constexpr uintptr_t kLevelplayMask = 0xAC71F4;   // imm32 of `test [ecx+0DCh], 4000000h`
 constexpr uintptr_t kEnterCallSite = 0xAC731D;   // call Character_EnterGlide(character)
 constexpr uintptr_t kEnterGlide = 0xAC6A10;
 constexpr int kCharacterInstance = 4104;   // -> +44 level definition
 constexpr int kController = 5804;          // the player's input object, null on AI characters
-constexpr int kLevelFlagsOffset = 220;
 constexpr int kStateOffset = 1270;             // u16 current state id on the character
 constexpr uintptr_t kGlideStateId = 0x11A2E10;  // dword the glide state registers under
-constexpr uint32_t kSuperBonusLevel = 0x2000000;
-constexpr uint32_t kLevelplayLevel = 0x4000000;
 
 using EnterFn = int(__cdecl*)(int character);
 
@@ -53,14 +46,6 @@ std::vector<std::string> Split(const std::string& list) {
     start = end + 1;
   }
   return items;
-}
-
-bool GameAllows(int character) {
-  int instance = *reinterpret_cast<int*>(character + kCharacterInstance);
-  int definition = instance ? *reinterpret_cast<int*>(instance + 44) : 0;
-  if (!definition) return false;
-  uint32_t flags = *reinterpret_cast<uint32_t*>(definition + kLevelFlagsOffset);
-  return (flags & kSuperBonusLevel) && !(flags & kLevelplayLevel);
 }
 
 const char* Name(int character) {
@@ -209,7 +194,14 @@ void PrepareDive(int character) {
 void ResetDive(int character);
 
 int __cdecl OnEnterGlide(int character) {
-  if (!GameAllows(character) && !Listed(character)) return 0;
+  if (!Listed(character)) {
+    int instance = *reinterpret_cast<int*>(character + kCharacterInstance);
+    int definition = instance ? *reinterpret_cast<int*>(instance + 44) : 0;
+    unsigned flags = definition ? *reinterpret_cast<unsigned*>(definition + 220) : 0;
+    if (!(flags & 0x2000000)) return 0;
+    if ((flags & 0x4000000) && !reinterpret_cast<bool(__cdecl*)(int)>(0x886D00)(character)) return 0;
+    return reinterpret_cast<EnterFn>(kEnterGlide)(character);
+  }
   if (Listed(character)) {
     // A glide that ended mid-dive never saw the release; the next one starts clean instead of
     // finishing that transition into the ground and then lifting on the old banked speed.
@@ -392,6 +384,7 @@ void ResetDive(int character) { Reset(DiveFor(character), character); }
 
 int __cdecl OnGlideMove(int character, int a2, int a3, int a4, float* a5) {
   int result = reinterpret_cast<MoveFn>(kGlideMove)(character, a2, a3, a4, a5);
+  if (!Listed(character)) return result;
   bool proper = GlidingProper(character);
   Dive& dive = DiveFor(character);
   auto dt = static_cast<float>(reinterpret_cast<FrameTimeFn>(kFrameTime)());

@@ -10,6 +10,7 @@ void PulloutClip(const std::string& clipPath);
 void TuckClip(const std::string& clipPath);
 void GlideOverrideClip(const std::string& clipPath);
 void FlashRollClip(const std::string& clipPath);
+void GrappleClips(const std::string& folder, bool (*eligibleSet)(int));
 int GlideId();
 int FallId();
 int DiveId();

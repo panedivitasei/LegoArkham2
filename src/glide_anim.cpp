@@ -10,6 +10,7 @@
 #include <list>
 
 #include "hook.h"
+#include "grapple_clips.h"
 
 namespace glideanim {
 namespace {
@@ -31,8 +32,14 @@ PrivateClip privateFall{{}, {}, "LegoArkham2_PrivateFall"};
 PrivateClip privatePullout{{}, {}, "LegoArkham2_PrivatePullout"};
 PrivateClip privateTuck{{}, {}, "LegoArkham2_PrivateTuck"};
 PrivateClip privateFlash{{}, {}, "LegoArkham2_PrivateFlashRoll"};
-PrivateClip* const clips[] = {&privateDive,&privateGlide,&privateBaseGlide,&privateFall,
+std::vector<PrivateClip*> clips = {&privateDive,&privateGlide,&privateBaseGlide,&privateFall,
                             &privatePullout,&privateTuck,&privateFlash};
+const char* grappleNames[] = {"grappleaim", "grapplecatch", "grapplethrow", "grapplewait",
+    "grapple_down", "grapple_gunout", "grapple_hang", "grapple_hang_aim", "grapple_hang_catch",
+    "grapple_hang_throw", "grapple_hang_wait", "grapple_idle", "grapple_up", "grapple_hang_jump"};
+PrivateClip grappleClips[14];
+std::string grapplePrivateNames[14];
+bool (*grappleSet)(int);
 struct PrivateEntry {
   void* bank;
   PrivateClip* clip;
@@ -151,6 +158,56 @@ int PrivateId(PrivateClip& clip) {
   return clip.id;
 }
 
+// 651E40's displaced instructions have no relative operands.
+__declspec(naked) void FindOriginal() {
+  __asm {
+    push esi
+    mov esi, [ecx + 2Ch]
+    xor eax, eax
+    push 0651E46h
+    ret
+  }
+}
+
+struct GrappleEntry {
+  int set, id;
+  const void* source;
+  std::array<uint8_t, 508> bytes;
+  std::array<uint32_t, 7> gameData;
+};
+std::list<GrappleEntry> grappleEntries;
+void* __fastcall FindGrapple(int set, void*, int id, int flagged) {
+  auto native = reinterpret_cast<void*(__thiscall*)(int, int, int)>(FindOriginal);
+  if (grappleSet && grappleSet(set)) {
+    auto action = reinterpret_cast<int(__cdecl*)(const char*)>(0x945980);
+    for (int i = 0; i < 14; ++i) {
+      if (id != action(grappleNames[i])) continue;
+      grappleClips[i].templateId = action("idle");
+      int replacement = PrivateId(grappleClips[i]);
+      auto source = replacement >= 0 ? native(set, replacement, 0) : nullptr;
+      if (!source) break;
+      if (flagged && !(grappleclips::metadata[i].playback[1] & 0x20)) return nullptr;
+      for (auto& entry : grappleEntries)
+        if (entry.set == set && entry.id == id && entry.source == source)
+          return entry.bytes.data();
+      grappleEntries.push_back({set, id, source, {}, {}});
+      auto& entry = grappleEntries.back();
+      memcpy(entry.bytes.data(), source, entry.bytes.size());
+      *reinterpret_cast<int16_t*>(entry.bytes.data() + 268) = static_cast<int16_t>(id);
+      const auto& metadata = grappleclips::metadata[i];
+      memcpy(entry.bytes.data()+270,metadata.playback,sizeof metadata.playback);
+      entry.bytes[488] = metadata.root;
+      memcpy(entry.bytes.data()+496,metadata.bounds,sizeof metadata.bounds);
+      // 894330 constructs GAMEANIMDATA; 9F8370 uses its gun-out marker before drawing the rope.
+      entry.gameData[0] = 0xF39C5C;
+      memcpy(entry.gameData.data()+1,metadata.gameData,sizeof metadata.gameData);
+      *reinterpret_cast<uint32_t**>(entry.bytes.data()+460) = entry.gameData.data();
+      return entry.bytes.data();
+    }
+  }
+  return native(set, id, flagged);
+}
+
 std::vector<uint8_t> ReadBlob(const std::string& path) {
   std::vector<uint8_t> data;
   if (FILE* f = fopen(path.c_str(), "rb")) {
@@ -200,6 +257,20 @@ void FlashRollClip(const std::string& clipPath) {
   privateFlash.blob = ReadBlob(clipPath);
   privateFlash.templateId = 263;
   if (privateFlash.blob.empty()) Note("flash roll: missing clip; disabled");
+}
+
+void GrappleClips(const std::string& folder, bool (*eligibleSet)(int)) {
+  grappleSet = eligibleSet;
+  for (int i = 0; i < 14; ++i) {
+    grapplePrivateNames[i] = std::string("LegoArkham2_Private_") + grappleNames[i];
+    grappleClips[i].name = grapplePrivateNames[i].c_str();
+    grappleClips[i].blob = ReadBlob(folder + "LegoArkham2_" + grappleNames[i] + ".an4");
+    clips.push_back(&grappleClips[i]);
+  }
+  uintptr_t offset = reinterpret_cast<uintptr_t>(FindGrapple) - 0x651E45;
+  hook::Patch(0x651E40, {0x56,0x8B,0x71,0x2C,0x33,0xC0},
+      {0xE9,static_cast<BYTE>(offset),static_cast<BYTE>(offset >> 8),
+       static_cast<BYTE>(offset >> 16),static_cast<BYTE>(offset >> 24),0x90});
 }
 
 bool FlashRollLoaded() { return FlashRollId() >= 0; }

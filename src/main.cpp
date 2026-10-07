@@ -52,65 +52,68 @@ void InstallCodeHooks() {
                       Setting("Camera", "MouseSensitivity", 100), Setting("Camera", "InvertMouse", 0) != 0,
                       Setting("Camera", "Collision", 1) != 0);
   if (Setting("Gameplay", "SkipCutscenes", 1)) cutscene::Install();
-  if (Setting("Gameplay", "Glide", 1)) {
-    char list[512];
-    GetPrivateProfileStringA("Gameplay", "GlideCharacters", "Batman,Robin,Batgirl,BatgirlClassic", list, sizeof(list),
-                             iniPath.c_str());
-    glide::Install(list);
-    glide::Speed(Setting("Gameplay", "GlideSpeed", 225));
-    char clip[MAX_PATH];
-    GetPrivateProfileStringA("Gameplay", "GlideClip", "LegoArkham2_glide.an4", clip, sizeof(clip), iniPath.c_str());
+  {
     std::string folder = iniPath.substr(0, iniPath.find_last_of('\\') + 1);
-    glideanim::Install(folder + clip,
+    glideanim::Install(folder + Text("Gameplay", "GlideClip", "LegoArkham2_glide.an4"),
                        Setting("Gameplay", "GlideClipLog", 0) ? folder + "LegoArkham2_clips.log" : "");
-    char fallClip[MAX_PATH];
-    GetPrivateProfileStringA("Gameplay", "FallClip", "", fallClip, sizeof(fallClip), iniPath.c_str());
-    glideanim::FallClip(folder + fallClip);
-    glide::FallSpeed(Setting("Gameplay", "FallSpeed", 70));
-    glide::Ease(Setting("Gameplay", "AnimEase", 250));
-    glide::DiveSetup(Setting("Gameplay", "DiveGain", 60),
-                     Setting("Gameplay", "DiveMax", 150), Setting("Gameplay", "DiveDecay", 40),
-                     Setting("Gameplay", "DiveDescent", 80), Setting("Gameplay", "DiveLift", 25),
-                     Setting("Gameplay", "DiveForward", 0), Setting("Gameplay", "DiveLiftTime", 15),
-                     Setting("Gameplay", "DiveEase", 500), Setting("Gameplay", "DivePullOut", 8),
-                     Setting("Gameplay", "DiveTuckTime", 4), Setting("Gameplay", "DiveCurve", 30),
-                     Setting("Gameplay", "DiveAttack", 50));
-    glide::DivePitch(Setting("Gameplay", "DivePitch", 60), Setting("Gameplay", "DiveClimbPitch", 12));
-    if (Setting("Gameplay", "GlideUnlimited", 1)) glide::Unlimited();
-    glide::RollGlide(Setting("Gameplay", "RollGlideHold", 10));
-    glide::Landing(Setting("Gameplay", "DiveLanding", 1) != 0);
-    char diveSound[MAX_PATH], openSound[MAX_PATH], loopSound[MAX_PATH];
-    GetPrivateProfileStringA("Gameplay", "DiveSound", "", diveSound, sizeof(diveSound), iniPath.c_str());
-    GetPrivateProfileStringA("Gameplay", "GlideOpenSound", "", openSound, sizeof(openSound), iniPath.c_str());
-    GetPrivateProfileStringA("Gameplay", "GlideLoopSound", "", loopSound, sizeof(loopSound), iniPath.c_str());
-    capesound::Install(diveSound[0] ? folder + diveSound : "", openSound[0] ? folder + openSound : "",
-                       loopSound[0] ? folder + loopSound : "", Setting("Gameplay", "CapeVolume", 700));
-    char diveClip[MAX_PATH], divers[256];
-    GetPrivateProfileStringA("Gameplay", "DiveClip", "LegoArkham2_dive.an4", diveClip, sizeof(diveClip), iniPath.c_str());
-    GetPrivateProfileStringA("Gameplay", "DiveClipCharacters", "Batman,Robin,Batgirl,BatgirlClassic", divers,
-                             sizeof(divers), iniPath.c_str());
-    if (diveClip[0]) {
-      glideanim::DiveClip(folder + diveClip);
-      glide::DiveClip(divers);
-      char pullout[MAX_PATH], pulloutDonor[64], tuck[MAX_PATH], tuckDonor[64];
-      GetPrivateProfileStringA("Gameplay", "PulloutClip", "LegoArkham2_pullout.an4", pullout, sizeof(pullout), iniPath.c_str());
-      GetPrivateProfileStringA("Gameplay", "PulloutClipDonor", "WhereDidHeGo", pulloutDonor, sizeof(pulloutDonor), iniPath.c_str());
-      GetPrivateProfileStringA("Gameplay", "TuckClip", "LegoArkham2_tuck.an4", tuck, sizeof(tuck), iniPath.c_str());
-      GetPrivateProfileStringA("Gameplay", "TuckClipDonor", "Whip_Pull_Pull", tuckDonor, sizeof(tuckDonor), iniPath.c_str());
-      if (pullout[0] && pulloutDonor[0])
-        glideanim::PulloutClip(folder + pullout);
-      if (tuck[0] && tuckDonor[0])
-        glideanim::TuckClip(folder + tuck);
-      glide::TransitionClips(pullout[0] ? pulloutDonor : "", Setting("Gameplay", "PulloutFrames", 24),
-                             tuck[0] ? tuckDonor : "", Setting("Gameplay", "TuckFrames", 12));
+    grapple::InstallTicks();
+    if (Setting("Gameplay", "Glide", 1)) {
+      char list[512];
+      GetPrivateProfileStringA("Gameplay", "GlideCharacters", "Batman,Robin,Batgirl,BatgirlClassic", list, sizeof(list),
+                               iniPath.c_str());
+      glide::Install(list);
+      glide::Speed(Setting("Gameplay", "GlideSpeed", 225));
+      char fallClip[MAX_PATH];
+      GetPrivateProfileStringA("Gameplay", "FallClip", "", fallClip, sizeof(fallClip), iniPath.c_str());
+      glideanim::FallClip(folder + fallClip);
+      glide::FallSpeed(Setting("Gameplay", "FallSpeed", 70));
+      glide::Ease(Setting("Gameplay", "AnimEase", 250));
+      glide::DiveSetup(Setting("Gameplay", "DiveGain", 60),
+                       Setting("Gameplay", "DiveMax", 150), Setting("Gameplay", "DiveDecay", 40),
+                       Setting("Gameplay", "DiveDescent", 80), Setting("Gameplay", "DiveLift", 25),
+                       Setting("Gameplay", "DiveForward", 0), Setting("Gameplay", "DiveLiftTime", 15),
+                       Setting("Gameplay", "DiveEase", 500), Setting("Gameplay", "DivePullOut", 8),
+                       Setting("Gameplay", "DiveTuckTime", 4), Setting("Gameplay", "DiveCurve", 30),
+                       Setting("Gameplay", "DiveAttack", 50));
+      glide::DivePitch(Setting("Gameplay", "DivePitch", 60), Setting("Gameplay", "DiveClimbPitch", 12));
+      if (Setting("Gameplay", "GlideUnlimited", 1)) glide::Unlimited();
+      glide::RollGlide(Setting("Gameplay", "RollGlideHold", 10));
+      glide::Landing(Setting("Gameplay", "DiveLanding", 1) != 0);
+      char diveSound[MAX_PATH], openSound[MAX_PATH], loopSound[MAX_PATH];
+      GetPrivateProfileStringA("Gameplay", "DiveSound", "", diveSound, sizeof(diveSound), iniPath.c_str());
+      GetPrivateProfileStringA("Gameplay", "GlideOpenSound", "", openSound, sizeof(openSound), iniPath.c_str());
+      GetPrivateProfileStringA("Gameplay", "GlideLoopSound", "", loopSound, sizeof(loopSound), iniPath.c_str());
+      capesound::Install(diveSound[0] ? folder + diveSound : "", openSound[0] ? folder + openSound : "",
+                         loopSound[0] ? folder + loopSound : "", Setting("Gameplay", "CapeVolume", 700));
+      char diveClip[MAX_PATH], divers[256];
+      GetPrivateProfileStringA("Gameplay", "DiveClip", "LegoArkham2_dive.an4", diveClip, sizeof(diveClip), iniPath.c_str());
+      GetPrivateProfileStringA("Gameplay", "DiveClipCharacters", "Batman,Robin,Batgirl,BatgirlClassic", divers,
+                               sizeof(divers), iniPath.c_str());
+      if (diveClip[0]) {
+        glideanim::DiveClip(folder + diveClip);
+        glide::DiveClip(divers);
+        char pullout[MAX_PATH], pulloutDonor[64], tuck[MAX_PATH], tuckDonor[64];
+        GetPrivateProfileStringA("Gameplay", "PulloutClip", "LegoArkham2_pullout.an4", pullout, sizeof(pullout), iniPath.c_str());
+        GetPrivateProfileStringA("Gameplay", "PulloutClipDonor", "WhereDidHeGo", pulloutDonor, sizeof(pulloutDonor), iniPath.c_str());
+        GetPrivateProfileStringA("Gameplay", "TuckClip", "LegoArkham2_tuck.an4", tuck, sizeof(tuck), iniPath.c_str());
+        GetPrivateProfileStringA("Gameplay", "TuckClipDonor", "Whip_Pull_Pull", tuckDonor, sizeof(tuckDonor), iniPath.c_str());
+        if (pullout[0] && pulloutDonor[0])
+          glideanim::PulloutClip(folder + pullout);
+        if (tuck[0] && tuckDonor[0])
+          glideanim::TuckClip(folder + tuck);
+        glide::TransitionClips(pullout[0] ? pulloutDonor : "", Setting("Gameplay", "PulloutFrames", 24),
+                               tuck[0] ? tuckDonor : "", Setting("Gameplay", "TuckFrames", 12));
+      }
+      std::string overrideClip = Text("Gameplay", "GlideOverrideClip", "LegoArkham2_glide_robin.an4");
+      if (!overrideClip.empty()) {
+        glideanim::GlideOverrideClip(folder + overrideClip);
+        glide::GlideOverride(Text("Gameplay", "GlideOverrideCharacters", "Robin"));
+      }
     }
-    std::string overrideClip = Text("Gameplay", "GlideOverrideClip", "LegoArkham2_glide_robin.an4");
-    if (!overrideClip.empty()) {
-      glideanim::GlideOverrideClip(folder + overrideClip);
-      glide::GlideOverride(Text("Gameplay", "GlideOverrideCharacters", "Robin"));
-    }
+    grapple::Characters(Text("Gameplay", "GrappleCharacters", "Batman,Robin,Batgirl,BatgirlClassic"));
+    climb::Characters(Text("Gameplay", "ClimbCharacters", "Batman,Robin,Batgirl,BatgirlClassic"));
     if (Setting("Gameplay", "GrappleAnywhere", 1))
-      grapple::Install(Setting("Gameplay", "GrappleRange", 14), Setting("Gameplay", "GrappleHeight", 30));
+      grapple::Install(Setting("Gameplay", "GrappleRange", 14), Setting("Gameplay", "GrappleHeight", 30), folder);
     if (Setting("Gameplay", "ClimbAnywhere", 1))
       climb::Install(Setting("Gameplay", "ClimbMode", 2), Setting("Gameplay", "ClimbRange", 12),
                      Setting("Gameplay", "ClimbKey", 0));
