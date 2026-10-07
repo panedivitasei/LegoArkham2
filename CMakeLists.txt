@@ -37,6 +37,6 @@ set_target_properties(dinput8 PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<
 
 add_custom_command(TARGET dinput8 POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/LegoArkham2.ini $<TARGET_FILE_DIR:dinput8>
-  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/anim $<TARGET_FILE_DIR:dinput8>)
+  COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/anim $<TARGET_FILE_DIR:dinput8>/anim)
 
 target_link_options(dinput8 PRIVATE /MAP)

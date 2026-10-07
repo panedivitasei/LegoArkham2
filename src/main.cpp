@@ -54,7 +54,8 @@ void InstallCodeHooks() {
   if (Setting("Gameplay", "SkipCutscenes", 1)) cutscene::Install();
   {
     std::string folder = iniPath.substr(0, iniPath.find_last_of('\\') + 1);
-    glideanim::Install(folder + Text("Gameplay", "GlideClip", "LegoArkham2_glide.an4"),
+    std::string animFolder = folder + "anim\\";
+    glideanim::Install(animFolder + Text("Gameplay", "GlideClip", "LegoArkham2_glide.an4"),
                        Setting("Gameplay", "GlideClipLog", 0) ? folder + "LegoArkham2_clips.log" : "");
     grapple::InstallTicks();
     if (Setting("Gameplay", "Glide", 1)) {
@@ -65,7 +66,7 @@ void InstallCodeHooks() {
       glide::Speed(Setting("Gameplay", "GlideSpeed", 225));
       char fallClip[MAX_PATH];
       GetPrivateProfileStringA("Gameplay", "FallClip", "", fallClip, sizeof(fallClip), iniPath.c_str());
-      glideanim::FallClip(folder + fallClip);
+      glideanim::FallClip(fallClip[0] ? animFolder + fallClip : "");
       glide::FallSpeed(Setting("Gameplay", "FallSpeed", 70));
       glide::Ease(Setting("Gameplay", "AnimEase", 250));
       glide::DiveSetup(Setting("Gameplay", "DiveGain", 60),
@@ -90,7 +91,7 @@ void InstallCodeHooks() {
       GetPrivateProfileStringA("Gameplay", "DiveClipCharacters", "Batman,Robin,Batgirl,BatgirlClassic", divers,
                                sizeof(divers), iniPath.c_str());
       if (diveClip[0]) {
-        glideanim::DiveClip(folder + diveClip);
+        glideanim::DiveClip(animFolder + diveClip);
         glide::DiveClip(divers);
         char pullout[MAX_PATH], pulloutDonor[64], tuck[MAX_PATH], tuckDonor[64];
         GetPrivateProfileStringA("Gameplay", "PulloutClip", "LegoArkham2_pullout.an4", pullout, sizeof(pullout), iniPath.c_str());
@@ -98,22 +99,22 @@ void InstallCodeHooks() {
         GetPrivateProfileStringA("Gameplay", "TuckClip", "LegoArkham2_tuck.an4", tuck, sizeof(tuck), iniPath.c_str());
         GetPrivateProfileStringA("Gameplay", "TuckClipDonor", "Whip_Pull_Pull", tuckDonor, sizeof(tuckDonor), iniPath.c_str());
         if (pullout[0] && pulloutDonor[0])
-          glideanim::PulloutClip(folder + pullout);
+          glideanim::PulloutClip(animFolder + pullout);
         if (tuck[0] && tuckDonor[0])
-          glideanim::TuckClip(folder + tuck);
+          glideanim::TuckClip(animFolder + tuck);
         glide::TransitionClips(pullout[0] ? pulloutDonor : "", Setting("Gameplay", "PulloutFrames", 24),
                                tuck[0] ? tuckDonor : "", Setting("Gameplay", "TuckFrames", 12));
       }
       std::string overrideClip = Text("Gameplay", "GlideOverrideClip", "LegoArkham2_glide_robin.an4");
       if (!overrideClip.empty()) {
-        glideanim::GlideOverrideClip(folder + overrideClip);
+        glideanim::GlideOverrideClip(animFolder + overrideClip);
         glide::GlideOverride(Text("Gameplay", "GlideOverrideCharacters", "Robin"));
       }
     }
     grapple::Characters(Text("Gameplay", "GrappleCharacters", "Batman,Robin,Batgirl,BatgirlClassic"));
     climb::Characters(Text("Gameplay", "ClimbCharacters", "Batman,Robin,Batgirl,BatgirlClassic"));
     if (Setting("Gameplay", "GrappleAnywhere", 1))
-      grapple::Install(Setting("Gameplay", "GrappleRange", 14), Setting("Gameplay", "GrappleHeight", 30), folder);
+      grapple::Install(Setting("Gameplay", "GrappleRange", 14), Setting("Gameplay", "GrappleHeight", 30), animFolder);
     if (Setting("Gameplay", "ClimbAnywhere", 1))
       climb::Install(Setting("Gameplay", "ClimbMode", 2), Setting("Gameplay", "ClimbRange", 12),
                      Setting("Gameplay", "ClimbKey", 0));
@@ -124,7 +125,7 @@ void InstallCodeHooks() {
       waterrun::Install(Setting("Gameplay", "FlashWaterSplash", 1) != 0);
     flashjump::Install(Setting("Gameplay", "FlashSprintJump", 300));
     if (Setting("Gameplay", "FlashRoll", 1))
-      flashroll::Install(folder + "LegoArkham2_flash_roll.an4", Setting("Gameplay", "FlashRollOffLedges", 1) != 0);
+      flashroll::Install(animFolder + "LegoArkham2_flash_roll.an4", Setting("Gameplay", "FlashRollOffLedges", 1) != 0);
   }
   reticle::Install(iniPath.substr(0, iniPath.find_last_of('\\') + 1) + "LegoArkham2_controls.ini");
   keybinds::Install(Setting("Controls", "ArkhamKeys", 1) != 0);
