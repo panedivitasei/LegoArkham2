@@ -21,7 +21,7 @@ This mod is only compatible with the below Steam version of Lego Batman 2: DC Su
 - Skippable cutscenes
 - Arkham-style gliding for Batman, Robin and Batgirl
 - Grapple onto the top edge of most structures
-- Most characters can now climb any wall or ceiling
+- Set characters can climb any wall or ceiling
 - Flash can now run on most surfaces, including walls
 - Sensitivity settings in options
 - And much more
