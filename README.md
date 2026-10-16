@@ -6,6 +6,12 @@ An Arkham-style gameplay mod for the Steam release of LEGO Batman 2: DC Super He
 
 ![Grapple](docs/grappling.png)
 
+## Compatibility
+This mod is only compatible with the below Steam version of Lego Batman 2: DC Super Heroes 
+| Executable | File version | Steam build |
+|---|---|---|
+| LEGOBatman2.exe | 1.0.0.412210 | 19482212 |
+
 ## Features
 
 - Third person camera
