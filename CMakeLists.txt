@@ -15,6 +15,7 @@ add_library(dinput8 SHARED
   src/device_follow.cpp
   src/input_frame.cpp
   src/quit.cpp
+  src/extracted.cpp
   src/flash_jump.cpp
   src/flash_roll.cpp
   src/reticle.cpp

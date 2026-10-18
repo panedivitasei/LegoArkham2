@@ -19,6 +19,7 @@
 #include "ability_controls.h"
 #include "devices.h"
 #include "device_follow.h"
+#include "extracted.h"
 #include "quit.h"
 #include "reticle.h"
 #include "flash_jump.h"
@@ -160,6 +161,7 @@ BOOL WINAPI DllMain(HINSTANCE self, DWORD reason, LPVOID) {
 
   HMODULE game = GetModuleHandleA(nullptr);
   if (Setting("Display", "Borderless", 1)) borderless::Install(game);
+  if (Setting("Compatibility", "HideDiscMarker", 1)) extracted::Install(game);
   quit::Install(game);
   frame::OnTick(devices::Tick);
   return TRUE;
