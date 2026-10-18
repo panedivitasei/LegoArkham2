@@ -12,7 +12,7 @@ This mod is only compatible with the below Steam version of Lego Batman 2: DC Su
 |---|---|---|
 | LEGOBatman2.exe | 1.0.0.412210 | 19482212 |
 
-The mod should work with extracted or unextracted games. 
+The mod should work with either an extracted or unextracted game.
 
 ## Features
 
